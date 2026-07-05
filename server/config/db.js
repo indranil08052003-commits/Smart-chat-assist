@@ -28,6 +28,7 @@ const connectDB = async () => {
     } catch (memError) {
       console.error(`❌ Failed to start In-Memory MongoDB: ${memError.message}`);
       console.log('💡 Please check your MONGODB_URI in .env or ensure MongoDB is running.');
+      throw memError;
     }
   }
 };

@@ -31,9 +31,6 @@ const io = new Server(server, {
   },
 });
 
-// Connect to MongoDB
-connectDB();
-
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(morgan('dev'));
@@ -117,15 +114,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-// Socket.IO
-socketHandler(io);
-
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 SmartChat Assist Server running on port ${PORT}`);
-  console.log(`📡 Socket.IO ready for real-time connections`);
-  console.log(`🌐 API: http://localhost:${PORT}/api`);
-  console.log(`💡 Health: http://localhost:${PORT}/api/health\n`);
-});
+
+const startServer = async () => {
+  try {
+    await connectDB();
+
+    // Socket.IO
+    socketHandler(io);
+
+    server.listen(PORT, () => {
+      console.log(`\n🚀 SmartChat Assist Server running on port ${PORT}`);
+      console.log(`📡 Socket.IO ready for real-time connections`);
+      console.log(`🌐 API: http://localhost:${PORT}/api`);
+      console.log(`💡 Health: http://localhost:${PORT}/api/health\n`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 module.exports = { app, io };
