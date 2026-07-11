@@ -43,14 +43,31 @@ const socketHandler = (io) => {
         });
 
         // Send greeting if new session
+        // if (!chat.messages || chat.messages.length === 0) {
+        //   const greeting = business.chatbotConfig?.greeting || 'Hi! How can I help you today? 😊';
+        //   socket.emit('bot_message', {
+        //     content: greeting,
+        //     timestamp: new Date(),
+        //     intent: 'greeting',
+        //   });
+        // } 
         if (!chat.messages || chat.messages.length === 0) {
-          const greeting = business.chatbotConfig?.greeting || 'Hi! How can I help you today? 😊';
-          socket.emit('bot_message', {
-            content: greeting,
-            timestamp: new Date(),
-            intent: 'greeting',
-          });
-        } else {
+            const greeting = business.chatbotConfig?.greeting || "Hi! How can I help you today? 😊";
+
+            const greetingMsg = {
+                role: "assistant",
+                content: greeting,
+                timestamp: new Date(),
+                intent: "greeting",
+            };
+
+            chat.messages.push(greetingMsg);
+            await chat.save();
+
+            session.messages.push(greetingMsg);
+
+            socket.emit("bot_message", greetingMsg);
+            }else {
           // Restore existing messages
           socket.emit('chat_history', chat.messages);
         }
