@@ -8,15 +8,21 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 const getSessionId = () => {
-  let id = localStorage.getItem("chat_session");
-
-  if (!id) {
-    id = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem("chat_session", id);
+  const fromUrl = searchParams.get('sid');
+  if (fromUrl) return fromUrl;
+  // fallback for direct visits to /widget/:businessId without a parent script
+  try {
+    let id = localStorage.getItem('chat_session');
+    if (!id) {
+      id = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem('chat_session', id);
+    }
+    return id;
+  } catch {
+    return `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
-
-  return id;
 };
+
 
 
 const WidgetPage = () => {

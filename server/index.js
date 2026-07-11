@@ -69,18 +69,60 @@ app.use('/api/faqs', faqRoutes);
 app.use('/api/widget', widgetRoutes);
 
 // Widget JS served for embedding
+// app.get('/widget.js', (req, res) => {
+//   const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+//   const widgetJs = `
+// (function() {
+//   var businessId = document.currentScript.getAttribute('data-business-id') || '';
+//   var iframe = document.createElement('iframe');
+//   iframe.src = '${clientUrl}/widget/' + businessId;
+//   iframe.style.cssText = 'position:fixed;bottom:20px;right:20px;width:380px;height:560px;border:none;z-index:999999;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.25);';
+//   iframe.allow = 'microphone';
+//   document.body.appendChild(iframe);
+  
+//   // Toggle button
+//   var btn = document.createElement('button');
+//   btn.innerHTML = '💬';
+//   btn.style.cssText = 'position:fixed;bottom:20px;right:20px;width:60px;height:60px;border-radius:50%;background:#6366f1;color:white;border:none;font-size:24px;cursor:pointer;z-index:1000000;box-shadow:0 4px 20px rgba(99,102,241,0.5);display:flex;align-items:center;justify-content:center;';
+//   var open = false;
+//   iframe.style.display = 'none';
+//   btn.onclick = function() {
+//     open = !open;
+//     iframe.style.display = open ? 'block' : 'none';
+//     btn.innerHTML = open ? '✕' : '💬';
+//     if(open) { iframe.style.bottom = '90px'; iframe.style.right = '20px'; }
+//   };
+//   document.body.appendChild(btn);
+// })();
+// `;
+//   res.type('application/javascript').send(widgetJs);
+// });
 app.get('/widget.js', (req, res) => {
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
   const widgetJs = `
 (function() {
   var businessId = document.currentScript.getAttribute('data-business-id') || '';
+
+  function getOrCreateSessionId() {
+    try {
+      var id = localStorage.getItem('smartchat_session_' + businessId);
+      if (!id) {
+        id = 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        localStorage.setItem('smartchat_session_' + businessId, id);
+      }
+      return id;
+    } catch (e) {
+      return 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    }
+  }
+
+  var sessionId = getOrCreateSessionId();
   var iframe = document.createElement('iframe');
-  iframe.src = '${clientUrl}/widget/' + businessId;
+  iframe.src = '${clientUrl}/widget/' + businessId + '?sid=' + encodeURIComponent(sessionId);
   iframe.style.cssText = 'position:fixed;bottom:20px;right:20px;width:380px;height:560px;border:none;z-index:999999;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.25);';
   iframe.allow = 'microphone';
   document.body.appendChild(iframe);
-  
-  // Toggle button
+
   var btn = document.createElement('button');
   btn.innerHTML = '💬';
   btn.style.cssText = 'position:fixed;bottom:20px;right:20px;width:60px;height:60px;border-radius:50%;background:#6366f1;color:white;border:none;font-size:24px;cursor:pointer;z-index:1000000;box-shadow:0 4px 20px rgba(99,102,241,0.5);display:flex;align-items:center;justify-content:center;';
