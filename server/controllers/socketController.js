@@ -42,6 +42,8 @@ const socketHandler = (io) => {
           sensitiveCount: 0,
         });
 
+      const session = activeSessions.get(sessionId);
+
         // Send greeting if new session
         // if (!chat.messages || chat.messages.length === 0) {
         //   const greeting = business.chatbotConfig?.greeting || 'Hi! How can I help you today? 😊';

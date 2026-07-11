@@ -6,7 +6,18 @@ import axios from 'axios';
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+// const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+const getSessionId = () => {
+  let id = localStorage.getItem("chat_session");
+
+  if (!id) {
+    id = `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem("chat_session", id);
+  }
+
+  return id;
+};
+
 
 const WidgetPage = () => {
   const { businessId } = useParams();
