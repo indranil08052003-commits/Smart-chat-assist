@@ -34,7 +34,7 @@ const WidgetPage = () => {
   const [rating, setRating] = useState(0);
   const [handoff, setHandoff] = useState(null);
   const socketRef = useRef(null);
-  const sessionId = useRef(generateSessionId());
+  const sessionId = useRef(getSessionId());
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
