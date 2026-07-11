@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-// const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-const getSessionId = () => {
-  const fromUrl = searchParams.get('sid');
+// sessionId is normally passed in via ?sid=... by the parent widget.js script
+// (generated on the host page's own first-party storage). fromUrl is that
+// value, read with useSearchParams() inside the component below. The
+// localStorage path here is only a fallback for someone opening this widget
+// URL directly (e.g. testing), not the primary embedded flow.
+const getSessionId = (fromUrl) => {
   if (fromUrl) return fromUrl;
-  // fallback for direct visits to /widget/:businessId without a parent script
   try {
     let id = localStorage.getItem('chat_session');
     if (!id) {
@@ -24,9 +26,9 @@ const getSessionId = () => {
 };
 
 
-
 const WidgetPage = () => {
   const { businessId } = useParams();
+  const [searchParams] = useSearchParams();
   const [config, setConfig] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -40,7 +42,8 @@ const WidgetPage = () => {
   const [rating, setRating] = useState(0);
   const [handoff, setHandoff] = useState(null);
   const socketRef = useRef(null);
-  const sessionId = useRef(getSessionId());
+  const sessionId = useRef(getSessionId(searchParams.get('sid')));
+  const messageCountRef = useRef(0);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -55,9 +58,11 @@ const WidgetPage = () => {
   }, [businessId]);
 
   useEffect(() => {
-    if (!config) return;
+    // Connect socket as soon as we know which business this is - we don't
+    // need the REST-fetched config first, since the server sends its own
+    // 'business_config' event right after join_chat anyway.
+    if (!businessId) return;
 
-    // Connect socket
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
@@ -68,6 +73,12 @@ const WidgetPage = () => {
 
     socket.on('disconnect', () => setConnected(false));
 
+    // IMPORTANT: this updates `config`, which used to also be a dependency of
+    // this same effect below. That created an infinite reconnect loop: this
+    // event fires -> setConfig creates a new object -> effect deps change ->
+    // cleanup disconnects the socket -> effect re-runs -> connects again ->
+    // join_chat -> server sends business_config again -> repeat forever.
+    // Fixed by depending only on `businessId` (see the dependency array).
     socket.on('business_config', (cfg) => setConfig(prev => ({ ...prev, ...cfg })));
 
     socket.on('chat_history', (msgs) => {
@@ -89,6 +100,11 @@ const WidgetPage = () => {
         timestamp: msg.timestamp,
         intent: msg.intent,
       }]);
+
+      // Show lead form after 3 bot messages. Uses a ref (not a local
+      // variable) so the count survives re-renders instead of resetting.
+      messageCountRef.current += 1;
+      if (messageCountRef.current === 3 && !leadCaptured) setShowLeadForm(true);
     });
 
     socket.on('bot_typing', (isTyping) => setTyping(isTyping));
@@ -105,15 +121,8 @@ const WidgetPage = () => {
 
     socket.on('error', (err) => console.error('Socket error:', err));
 
-    // Show lead form after 3 messages
-    let messageCount = 0;
-    socket.on('bot_message', () => {
-      messageCount++;
-      if (messageCount === 3 && !leadCaptured) setShowLeadForm(true);
-    });
-
     return () => socket.disconnect();
-  }, [config, businessId]);
+  }, [businessId]);
 
   const sendMessage = () => {
     if (!input.trim() || !connected) return;

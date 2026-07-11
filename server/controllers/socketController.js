@@ -15,6 +15,10 @@ const socketHandler = (io) => {
     socket.on('join_chat', async ({ businessId, sessionId }) => {
       try {
         socket.join(sessionId);
+        // Track this socket's sessionId directly (socket.rooms is unreliable
+        // to inspect from the 'disconnect' handler - rooms are already torn
+        // down by the time that event fires).
+        socket.data.sessionId = sessionId;
         
         // Load or create chat session
         let chat = await Chat.findOne({ sessionId, businessId });
@@ -214,10 +218,16 @@ const socketHandler = (io) => {
 
     // Disconnect
     socket.on('disconnect', async () => {
-      // Find and close active sessions for this socket
-      for (const [sessionId, session] of activeSessions.entries()) {
-        const socketRooms = [...socket.rooms];
-        if (socketRooms.includes(sessionId)) {
+      // Use the sessionId we stored on join, rather than inspecting
+      // socket.rooms here - by the time 'disconnect' fires, Socket.IO has
+      // already removed the socket from all its rooms, so the old
+      // room-membership check almost never matched and chats were rarely
+      // getting closed out with sentiment/duration.
+      const sessionId = socket.data.sessionId;
+      const session = sessionId ? activeSessions.get(sessionId) : null;
+
+      if (session) {
+        try {
           const sentiment = analyzeConversationSentiment(session.messages);
           await Chat.findByIdAndUpdate(session.chatId, {
             status: 'closed',
@@ -225,9 +235,12 @@ const socketHandler = (io) => {
             sentiment,
             duration: Math.floor((Date.now() - session.startTime) / 1000),
           });
-          activeSessions.delete(sessionId);
+        } catch (error) {
+          console.error('disconnect cleanup error:', error);
         }
+        activeSessions.delete(sessionId);
       }
+
       console.log(`🔌 Socket disconnected: ${socket.id}`);
     });
   });
