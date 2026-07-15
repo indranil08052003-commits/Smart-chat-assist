@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 const connectDB = require('./config/db');
 
 // Route imports
@@ -131,6 +132,11 @@ app.get('/widget.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'SmartChat Assist API is running 🚀', timestamp: new Date() });
 });
+// Widget manager console
+app.get('/widget-manager.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'widget-manager.html'));
+});
+
 
 // 404 handler
 app.use((req, res) => {
