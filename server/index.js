@@ -136,7 +136,9 @@ app.get('/api/health', (req, res) => {
 app.get('/widget-manager.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'widget-manager.html'));
 });
-
+app.get('/chatbot-demo.html', (req, res) => {
+     res.sendFile(path.join(__dirname, 'chatbot-demo.html'));
+   });
 
 // 404 handler
 app.use((req, res) => {
