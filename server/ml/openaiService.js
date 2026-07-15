@@ -1,4 +1,5 @@
 const OpenAI = require('openai');
+const { classifyIntent } = require('./mlService');
 
 let openai;
 const getOpenAI = () => {
@@ -6,6 +7,106 @@ const getOpenAI = () => {
     openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
   return openai;
+};
+
+/**
+ * Smart local rule-based responder for fallback when OpenAI is unavailable
+ */
+const generateLocalResponse = (userMessage, business, faqs = []) => {
+  const { businessName, businessInfo, chatbotConfig } = business;
+  const { intent } = classifyIntent(userMessage);
+  const lowerMsg = userMessage.toLowerCase();
+  
+  // 1. Search for a matching active FAQ (exact or keyword matching)
+  let bestFaq = null;
+  let maxMatches = 0;
+  
+  for (const faq of faqs) {
+    if (!faq.isActive) continue;
+    
+    // Check keyword overlap
+    const questionWords = faq.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    let matches = 0;
+    for (const w of questionWords) {
+      if (lowerMsg.includes(w)) matches++;
+    }
+    
+    // Direct similarity
+    if (lowerMsg.includes(faq.question.toLowerCase()) || faq.question.toLowerCase().includes(lowerMsg)) {
+      matches += 5;
+    }
+    
+    if (matches > maxMatches && matches >= 2) {
+      maxMatches = matches;
+      bestFaq = faq;
+    }
+  }
+
+  if (bestFaq) {
+    return bestFaq.answer;
+  }
+
+  // 2. Fall back to intent-based responses using businessInfo
+  switch (intent) {
+    case 'pricing':
+      if (businessInfo?.pricing) {
+        return `Regarding our pricing: ${businessInfo.pricing}. Let us know if you have specific questions!`;
+      }
+      return `For pricing details at ${businessName}, I recommend contacting us directly or checking our services.`;
+
+    case 'hours':
+      if (businessInfo?.openingHours) {
+        return `${businessName} is open: ${businessInfo.openingHours}.`;
+      }
+      return `Please contact ${businessName} directly for our current opening hours.`;
+
+    case 'location':
+      if (businessInfo?.address) {
+        return `You can find us at: ${businessInfo.address}.`;
+      }
+      return `${businessName}'s address is not listed. Please reach out to us directly for directions!`;
+
+    case 'services':
+      if (businessInfo?.services) {
+        return `We offer the following services: ${businessInfo.services}.`;
+      }
+      return `To learn more about the services offered at ${businessName}, please contact us directly!`;
+
+    case 'delivery':
+      if (businessInfo?.deliveryOptions) {
+        return `Our delivery options: ${businessInfo.deliveryOptions}.`;
+      }
+      return `Please contact ${businessName} directly to inquire about shipping and delivery options.`;
+
+    case 'booking':
+      return `To make a booking or appointment with ${businessName}, please reach out to us directly!`;
+
+    case 'complaint':
+      return `I'm very sorry to hear that you're having an issue. Let me share our contact info, or you can request to connect via WhatsApp so we can resolve this for you.`;
+
+    case 'contact':
+      const whatsappSuffix = chatbotConfig?.whatsappNumber ? ` You can also reach us on WhatsApp at ${chatbotConfig.whatsappNumber}.` : '';
+      return `You can contact ${businessName} directly. We're here to help!${whatsappSuffix}`;
+
+    case 'greeting':
+      return chatbotConfig?.greeting || `Hi! How can I help you today? 😊`;
+
+    case 'farewell':
+      return `Goodbye! Let us know if you need anything else.`;
+
+    default:
+      // Try to find any FAQ matching the intent/category
+      const categoryFaq = faqs.find(f => f.isActive && f.category === intent);
+      if (categoryFaq) {
+        return categoryFaq.answer;
+      }
+      
+      // Default general response
+      if (businessInfo?.services) {
+        return `Welcome to ${businessName}! We provide: ${businessInfo.services}. How can I assist you today?`;
+      }
+      return `Hello! How can I assist you with ${businessName} today?`;
+  }
 };
 
 /**
@@ -52,19 +153,30 @@ Start every new conversation with: "${chatbotConfig?.greeting || 'Hi! How can I 
 };
 
 /**
- * Get AI response from GPT-4
+ * Get AI response from GPT-4 with a local rule-based fallback
  */
 const getChatResponse = async (messages, business, faqs = []) => {
-  const client = getOpenAI();
-  
-  // Build conversation messages
-  const systemPrompt = buildSystemPrompt(business, faqs);
-  const conversationMessages = [
-    { role: 'system', content: systemPrompt },
-    ...messages.map(m => ({ role: m.role, content: m.content })),
-  ];
+  const userMessage = messages[messages.length - 1]?.content || '';
+  const apiKey = process.env.OPENAI_API_KEY;
+  const isKeyInvalid = !apiKey || apiKey === 'sk-your-openai-api-key-here' || apiKey.trim() === '';
+
+  if (isKeyInvalid) {
+    console.log('⚠️ OpenAI API Key is missing or default. Using local rule-based responder.');
+    return {
+      content: generateLocalResponse(userMessage, business, faqs),
+      tokensUsed: 0,
+      isLocalFallback: true,
+    };
+  }
 
   try {
+    const client = getOpenAI();
+    const systemPrompt = buildSystemPrompt(business, faqs);
+    const conversationMessages = [
+      { role: 'system', content: systemPrompt },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ];
+
     const response = await client.chat.completions.create({
       model: 'gpt-4o-mini', // Cost-effective, fast model
       messages: conversationMessages,
@@ -78,19 +190,13 @@ const getChatResponse = async (messages, business, faqs = []) => {
       tokensUsed: response.usage?.total_tokens || 0,
     };
   } catch (error) {
-    if (error.code === 'insufficient_quota') {
-      return {
-        content: "I'm currently experiencing high demand. Please try again in a moment or contact us directly.",
-        tokensUsed: 0,
-      };
-    }
-    if (error.code === 'invalid_api_key') {
-      return {
-        content: "I'm having trouble connecting right now. Please contact us directly for assistance.",
-        tokensUsed: 0,
-      };
-    }
-    throw error;
+    console.error('🔴 OpenAI API Error:', error.message);
+    console.log('🔄 Falling back to local rule-based responder.');
+    return {
+      content: generateLocalResponse(userMessage, business, faqs),
+      tokensUsed: 0,
+      isLocalFallback: true,
+    };
   }
 };
 
